@@ -1,0 +1,87 @@
+# Visualize on https://erd.surge.sh
+# or https://quick-erd.surge.sh
+#
+# Relationship Types
+#  -    - one to one
+#  -<   - one to many
+#  >-   - many to one
+#  >-<  - many to many
+#  -0   - one to zero or one
+#  0-   - zero or one to one
+#  0-0  - zero or one to zero or one
+#  -0<  - one to zero or many
+#  >0-  - zero or many to one
+#
+////////////////////////////////////
+
+
+user
+----
+id integer PK
+username text unique
+
+
+package
+-------
+id integer PK
+name text unique
+create_time integer
+modify_time integer
+description text
+readme text
+author_id integer NULL FK >- user.id
+license text
+homepage text
+
+
+keyword
+-------
+id integer PK
+keyword text unique
+
+
+package_keyword
+---------------
+id integer PK
+package_id integer FK >0- package.id
+keyword_id integer FK >0- keyword.id
+
+
+daily_download
+--------------
+id integer PK
+package_id integer FK >0- package.id
+date text
+count integer
+invalid_time integer NULL
+
+
+maintainer
+----------
+id integer PK
+name text
+email text
+
+
+package_maintainer
+------------------
+id integer PK
+package_id integer FK >0- package.id
+maintainer_id integer FK >0- maintainer.id
+
+
+# zoom: 1.000
+# view: (-179, -55)
+# text-bg: #6495ed
+# text-color: #000000
+# diagram-bg: #f5f5f5
+# diagram-text: #f5f5f5
+# table-bg: #ffffff
+# table-text: #000000
+# user (155, 552)
+# package (155, 227)
+# keyword (808, 300)
+# package_keyword (492, 269)
+# daily_download (-199, 202)
+# maintainer (806, 516)
+# package_maintainer (480, 470)
