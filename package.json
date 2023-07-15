@@ -22,6 +22,7 @@
     "typescript": "^5.1.6"
   },
   "dependencies": {
+    "@beenotung/tslib": "^22.0.0",
     "better-sqlite3-proxy": "^2.4.1",
     "better-sqlite3-schema": "^3.1.2",
     "cast.ts": "^1.7.1",

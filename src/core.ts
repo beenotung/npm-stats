@@ -10,7 +10,9 @@ import {
 } from 'cast.ts'
 import { db } from './db'
 import { Package, proxy } from './proxy'
-import { del, find, unProxy } from 'better-sqlite3-proxy'
+import { find } from 'better-sqlite3-proxy'
+import { YEAR, DAY } from '@beenotung/tslib/time'
+import { format_2_digit } from '@beenotung/tslib'
 
 type date_str = string
 
@@ -111,6 +113,12 @@ async function downloadMeta(name: string) {
   } else {
     package_id = proxy.package.push(patch)
   }
+  if (meta.keywords) {
+    storeKeywords({ package_id, keywords: meta.keywords })
+  }
+  if (meta.maintainers) {
+    storeMaintainers({ package_id, maintainers: meta.maintainers })
+  }
   return proxy.package[package_id]
 }
 
@@ -150,6 +158,11 @@ const min_from = '2015-01-10'
 const fallback_from = '2022-01-01'
 const fallback_until = '2023-01-01'
 
+function getMaxUntil(): date_str {
+  let date = fromTime(Date.now())
+  return shiftDays(date, -DAY * 14)
+}
+
 async function collectPackage(name: string) {
   let pkg = await downloadMeta(name)
   console.log('pkg:', {
@@ -171,36 +184,57 @@ async function collectPackage(name: string) {
   rangeRow.min_date ||= fallback_from
   rangeRow.max_date ||= fallback_until
   let create_date = fromTime(pkg.create_time)
-  let from = rangeRow.min_date
-  let until = rangeRow.min_date
+  await downloadDayRangeBackward({
+    package: pkg,
+    from: maxDateStr(create_date, min_from),
+    until: shiftDays(rangeRow.min_date, -DAY),
+  })
+  await downloadDayRangeForward({
+    package: pkg,
+    from: shiftDays(rangeRow.max_date, DAY),
+    until: getMaxUntil(),
+  })
+}
+
+function maxDateStr(a: date_str, b: date_str): date_str {
+  return a > b ? a : b
+}
+
+async function downloadDayRangeBackward(options: {
+  package: Package
+  from: string
+  until: string
+}) {
+  let until = options.until
   for (;;) {
-    from = prevYear(from)
-    if (from < create_date) {
-      from = create_date
+    let from = shiftDays(until, -YEAR)
+    if (from < options.from) {
+      from = options.from
     }
-    if (from < min_from) {
-      from = min_from
-    }
-    await downloadDailyStats({ package: pkg, from, until })
-    if (from == create_date || from == min_from || from == until) {
+    if (from > until) {
       break
     }
-    until = from
+    await downloadDailyStats({ package: options.package, from, until })
+    until = shiftDays(from, -DAY)
   }
-  from = rangeRow.max_date
-  let date = new Date()
-  date.setDate(date.getDate() - 14)
-  let max_date = fromTime(date.getTime())
+}
+
+async function downloadDayRangeForward(options: {
+  package: Package
+  from: string
+  until: string
+}) {
+  let from = options.from
   for (;;) {
-    until = nextYear(from)
-    if (until > max_date) {
-      until = max_date
+    let until = shiftDays(from, YEAR)
+    if (until > options.until) {
+      until = options.until
     }
-    await downloadDailyStats({ package: pkg, from, until })
-    if (from == until) {
+    if (from > until) {
       break
     }
-    from = until
+    await downloadDailyStats({ package: options.package, from, until })
+    from = shiftDays(until, DAY)
   }
 }
 
@@ -229,7 +263,18 @@ function storeMaintainers(options: {
   }[]
 }) {
   for (let maintainer of options.maintainers) {
-    let row = find(proxy.maintainer, {})
+    let maintainer_id =
+      find(proxy.maintainer, maintainer)?.id ||
+      proxy.maintainer.push(maintainer)
+    let id =
+      find(proxy.package_maintainer, {
+        package_id: options.package_id,
+        maintainer_id,
+      })?.id ||
+      proxy.package_maintainer.push({
+        package_id: options.package_id,
+        maintainer_id,
+      })
   }
 }
 
@@ -238,23 +283,25 @@ function fromTime(time: number) {
   return str.split('T')[0]
 }
 
-function nextYear(str: date_str): string {
+function shiftDays(str: date_str, delta: number): date_str {
   let parts = str.split('-')
-  parts[0] = String(+parts[0] + 1)
-  return parts.join('-')
-}
-
-function prevYear(str: date_str): string {
-  let parts = str.split('-')
-  parts[0] = String(+parts[0] - 1)
-  return parts.join('-')
+  let date = new Date()
+  date.setFullYear(+parts[0])
+  date.setMonth(+parts[1] - 1)
+  date.setDate(+parts[2])
+  date.setTime(date.getTime() + delta)
+  return [
+    date.getFullYear(),
+    format_2_digit(date.getMonth() + 1),
+    format_2_digit(date.getDate()),
+  ].join('-')
 }
 
 async function test() {
-  // let packages = ['vue', '@angular/core', 'react', 'svelte', '@builder.io/qwik']
-  // for (let name of packages) {
-  //   await collectPackage(name)
-  // }
+  let packages = ['vue', '@angular/core', 'react', 'svelte', '@builder.io/qwik']
+  for (let name of packages) {
+    await collectPackage(name)
+  }
 
   invalidStats({
     package: 'vue',
